@@ -5,7 +5,9 @@ namespace App\Services;
 use App\Mail\ContactFormMail;
 use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Facades\Validator;
-use App\Models\ApiUser;
+use App\Models\User;
+use Carbon\Carbon;
+use Illuminate\Support\Facades\Hash;
 
 class AuthService
 {
@@ -15,8 +17,8 @@ class AuthService
         $validator = Validator::make($data, [
             'first_name' => 'required',
             'last_name' => 'required',
-            'email' => 'required|email|unique:api_users,email',
-            'mobile' => 'required|unique:api_users,mobile',
+            'email' => 'required|email|unique:users,email',
+            'mobile' => 'required|unique:users,mobile',
             'password' => 'required|min:6',
         ]);
 
@@ -26,15 +28,16 @@ class AuthService
 
         // Generate OTP and save it in the database
         $otp = rand(100000, 999999);
-        $user = new ApiUser([
+        $user = new User([
             'first_name' => $data['first_name'],
             'last_name' => $data['last_name'],
             'email' => $data['email'],
             'mobile' => $data['mobile'],
-            'password' => bcrypt($data['password']),
+            'password' => Hash::make($data['password']),
             'otp' => $otp,
+            'otp_expiry' => now()->addMinutes(10),
         ]);
-        // $user->save();
+        $user->save();
 
         $data = [
             'name' => $data['first_name'].' '.$data['last_name'],
@@ -44,10 +47,6 @@ class AuthService
         $subject = 'Your OTP for registration';
         // Send OTP email to user
         Mail::to($user->email)->send(new ContactFormMail($subject, $data));
-
-        // Mail::send('emails.contact', ['otp' => $otp], function ($messages) use ($user) {
-        //     $messages->to($user->email)->subject('Your OTP for registration');
-        // });
 
         return ['status' => 'success', 'message' => 'OTP sent to your email'];
     }
@@ -62,36 +61,61 @@ class AuthService
             return ['status' => 'error', 'message' => $validator->errors()->first()];
         }
 
-        $user = ApiUser::where('email', $data['email'])->first();
+        $user = User::where('email', $data['email'])->first();
 
         if (!$user) {
             return response()->json(['message' => 'User not found'], 404);
         }
 
+        if ($user->is_verified) {
+            return response()->json(['error' => 'User already verified.'], 422);
+        }
+
         // Send OTP to user
-        $otp = rand(100000, 999999);
+        if ($user->otp_expiry < now()) {
+            $user->otp = rand(100000, 999999);
+            $user->otp_expiry = now()->addMinutes(10);
+            $user->save();
+
+            $data = [
+                'name' => $user['first_name'].' '.$user['last_name'],
+                'message' => $user->otp
+            ];
+    
+            $subject = 'Your OTP for verfication';
+            // Send OTP email to user
+            Mail::to($user->email)->send(new ContactFormMail($subject, $data));
+        }
         
-        $data = [
-            'name' => $user['first_name'].' '.$user['last_name'],
-            'message' => $otp
-        ];
 
-        $subject = 'Your OTP for verfication';
-        // Send OTP email to user
-        Mail::to($user->email)->send(new ContactFormMail($subject, $data));
-        // Mail::send('emails.otp', $data, function($message) use ($user) {
-        //     $message->to($user->email)->subject('OTP Verification');
-        // });
-
-        return ['status' => 'success', 'message' => 'User verified'];
+        return ['status' => 'success', 'message' => $user->otp];
     }
 
     public function verifyOTP(array $data)
     {
-        $user = ApiUser::where('email', $data['email'])->first();
+        $validator = Validator::make($data, [
+            'email' => 'required|string|email|max:255',
+            'otp' => 'required|max:6',
+        ]);
+
+        if ($validator->fails()) {
+            return response()->json(['errors' => $validator->errors()], 422);
+        }
+
+        $user = User::where('email', $data['email'])->first();
 
         if (!$user) {
             return ['status' => 'error', 'message' => 'User not found'];
+        }
+
+        if ($user->is_verified) {
+            return response()->json(['error' => 'User already verified.'], 422);
+        }
+
+        $otpExpiry = Carbon::parse($user->otp_expiry);
+
+        if (Carbon::now()->diffInMinutes($otpExpiry) > 10) {
+            return response()->json(['error' => 'OTP has expired'], 401);
         }
 
         if ($user->otp != $data['otp']) {
@@ -99,8 +123,7 @@ class AuthService
         }
 
         // Mark the user as verified and delete the OTP
-        $user->verified = true;
-        $user->otp = null;
+        $user->is_verified = true;
         $user->save();
 
         return ['status' => 'success', 'message' => 'User verified'];

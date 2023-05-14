@@ -8,7 +8,7 @@ use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Password;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Support\Facades\Mail;
-use App\Models\ApiUser;
+use App\Models\User;
 use App\Services\AuthService;
 
 class AuthController extends Controller
@@ -36,21 +36,33 @@ class AuthController extends Controller
 
     public function verifyOTP(Request $request)
     {
-        $user = ApiUser::find('id', $request->id)->first();
+        $result = $this->authService->verifyOTP($request->all());
 
-        if (!$user || $user->is_verified) {
-            return response()->json(['message' => 'Unauthorized'], 401);
+        return response()->json($result);
+    }
+
+
+    public function login(Request $request)
+    {
+        $credentials = $request->only('email', 'password');
+
+        if (Auth::attempt($credentials)) {
+            $user = Auth::user();
+
+            if (!$user->is_verified) {
+                return response()->json(['error' => 'User not verified.'], 422);
+            }
+            $token = $user->createToken('name')->accessToken; 
+            return response()->json(['token' => $token], 200);
         }
 
-        $otp = $request->otp;
+        return response()->json(['error' => 'Invalid credentials'], 401);
+    }
 
-        if (!$otp || $user->otp != $otp) {
-            return response()->json(['message' => 'Invalid OTP'], 400);
-        }
-
-        $user->is_verified = true;
-        $user->save();
-
-        return response()->json(['message' => 'OTP verified successfully'], 200);
+    public function profile(Request $request)
+    {
+        $user = Auth::user();
+        
+        return response()->json($user);
     }
 }

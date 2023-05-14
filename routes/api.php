@@ -14,22 +14,21 @@ use App\Http\Controllers\Api\AuthController;
 |
 */
 
-Route::middleware('auth:sanctum')->get('/user', function (Request $request) {
-    return $request->user();
-});
-
-Route::get('/mess', function(){
-    return response()->json(['message' => 'User signed up successfully!'], 200);
-});
 
 // Route for registering a user
 Route::post('/signup', [AuthController::class ,  'signUp']);
 
 // Route for logging in a user
-Route::post('/login', 'UserController@login');
+Route::post('/login', [AuthController::class ,  'login']);
 
 // Route for sending OTP to a user's email
-Route::post('/sendOTP', 'UserController@sendOTP');
+Route::post('/sendOTP', [AuthController::class ,  'sendOTP']);
 
 // Route for verifying OTP and confirming a user's profile
-Route::post('/verifyOTP', 'UserController@verifyOTP');
+Route::post('/verifyOTP', [AuthController::class ,  'verifyOTP']);
+
+// Route::middleware('auth:api')->get('/profile', [AuthController::class ,  'profile']);
+
+Route::group(['middleware' => 'auth:api'], function(){
+    Route::get('profile', [AuthController::class ,  'profile']);
+});
