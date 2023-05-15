@@ -19,7 +19,7 @@ use App\Http\Controllers\Api\AuthController;
 Route::post('/signup', [AuthController::class ,  'signUp']);
 
 // Route for logging in a user
-Route::post('/login', [AuthController::class ,  'login']);
+Route::post('/login', [AuthController::class ,  'login'])->name('login');
 
 // Route for sending OTP to a user's email
 Route::post('/sendOTP', [AuthController::class ,  'sendOTP']);
@@ -29,6 +29,6 @@ Route::post('/verifyOTP', [AuthController::class ,  'verifyOTP']);
 
 // Route::middleware('auth:api')->get('/profile', [AuthController::class ,  'profile']);
 
-Route::group(['middleware' => 'auth:api'], function(){
+Route::group(['namespace' => 'Auth', 'middleware' => 'auth:api'], function(){
     Route::get('profile', [AuthController::class ,  'profile']);
 });

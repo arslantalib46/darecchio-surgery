@@ -45,23 +45,23 @@ class AuthController extends Controller
     public function login(Request $request)
     {
         $credentials = $request->only('email', 'password');
-
-        if (Auth::attempt($credentials)) {
+        $user = Auth::attempt($credentials);
+        if ($user) {
             $user = Auth::user();
 
             if (!$user->is_verified) {
                 return response()->json(['error' => 'User not verified.'], 422);
             }
-            $token = $user->createToken('name')->accessToken; 
+            $token = $user->createToken('AuthUserToken')->accessToken;
             return response()->json(['token' => $token], 200);
         }
 
         return response()->json(['error' => 'Invalid credentials'], 401);
     }
 
-    public function profile(Request $request)
+    public function profile()
     {
-        $user = Auth::user();
+        $user = User::get();
         
         return response()->json($user);
     }
